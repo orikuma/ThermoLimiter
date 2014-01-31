@@ -21,6 +21,7 @@
 #include <hrpModel/Link.h>
 #include <hrpModel/JointPath.h>
 
+#include "ThermoLimiterService_impl.h"
 #include "../Stabilizer/TwoDofController.h"
 #include "../ThermoEstimator/MotorHeatParam.h"
 
@@ -102,6 +103,9 @@ class ThermoLimiter
   // no corresponding operation exists in OpenRTm-aist-0.2.0
   // virtual RTC::ReturnCode_t onRateChanged(RTC::UniqueId ec_id);
 
+  bool isMaxTemperatureError(int jointId);
+  double getMaxToruqe(int jointId);
+
 
  protected:
   // Configuration variable declaration
@@ -134,21 +138,22 @@ class ThermoLimiter
 
   // Service declaration
   // <rtc-template block="service_declare">
-  // RTC::CorbaPort m_ThermoLimiterServicePort;
+  RTC::CorbaPort m_ThermoLimiterServicePort;
   
   // </rtc-template>
 
   // Consumer declaration
   // <rtc-template block="consumer_declare">
-  // ThermoLimiterService_impl m_ThermoLimiterService;
+  ThermoLimiterService_impl m_service0;
   
   // </rtc-template>
-
+  
  private:
   class ThermoLimiterParam
   {
   public:
     double maxTemperature;
+    double tauMax;
     bool temperatureErrorFlag;
     MotorHeatParam param;
 
@@ -159,6 +164,7 @@ class ThermoLimiter
     // default params for motor heat param
     void defaultParams(){
       maxTemperature = 80.0;
+      tauMax = 60.0;
       temperatureErrorFlag = false;
       param.defaultParams();
     } 
@@ -172,7 +178,7 @@ class ThermoLimiter
   std::vector<TwoDofController> m_motorTwoDofControllers;
   std::vector<ThermoLimiterParam> m_thermoLimiterParams;
 
-  bool limitTemperature(hrp::dvector &tauMax);
+  bool limitTemperature(void);
 };
 
 

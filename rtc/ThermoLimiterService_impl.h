@@ -1,26 +1,32 @@
 // -*- mode: c++; indent-tabs-mode: t; tab-width: 4; c-basic-offset: 4; -*-
-#ifndef __NULL_SERVICE_H__
-#define __NULL_SERVICE_H__
+#ifndef __THERMO_LIMITER_SERVICE_H__
+#define __THERMO_LIMITER_SERVICE_H__
 
-#include "NullService.hh"
+#include "ThermoLimiterService.hh"
 
-class NullService_impl
-	: public virtual POA_OpenHRP::NullService,
+class ThermoLimiter;
+
+class ThermoLimiterService_impl
+	: public virtual POA_OpenHRP::ThermoLimiterService,
 	  public virtual PortableServer::RefCountServantBase
 {
 public:
 	/**
 	   \brief constructor
 	*/
-	NullService_impl();
+	ThermoLimiterService_impl();
 
 	/**
 	   \brief destructor
 	*/
-	virtual ~NullService_impl();
+	virtual ~ThermoLimiterService_impl();
 
-	void echo(const char *msg);
+	bool isMaxTemperatureError(CORBA::Long jointId);
+	double getMaxToruqe(CORBA::Long jointId);
+	void thermo_limiter(ThermoLimiter *i_thermo_limiter);
+
 private:
+	ThermoLimiter *m_thermo_limiter;
 };
 
 #endif

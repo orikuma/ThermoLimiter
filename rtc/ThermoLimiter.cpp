@@ -46,8 +46,10 @@ ThermoLimiter::ThermoLimiter(RTC::Manager* manager)
     m_tauInIn("tauIn", m_tauIn),
     m_qCurrentInIn("qCurrentIn", m_qCurrentIn),
     m_tauMaxOutOut("tauMax", m_tauMaxOut),
+    m_ThermoLimiterServicePort("ThermoLimiterService"),
     m_debugLevel(1)
 {
+  m_service0.thermo_limiter(this);
 }
 
 ThermoLimiter::~ThermoLimiter()
@@ -76,8 +78,10 @@ RTC::ReturnCode_t ThermoLimiter::onInitialize()
   addOutPort("tauMax", m_tauMaxOutOut);
   
   // Set service provider to Ports
+  m_ThermoLimiterServicePort.registerProvider("service0", "ThermoLimiterService", m_service0);
   
   // Set service consumers to Ports
+  addPort(m_ThermoLimiterServicePort);
   
   // Set CORBA Service Ports
   
@@ -112,11 +116,13 @@ RTC::ReturnCode_t ThermoLimiter::onInitialize()
     std::cerr <<  "[WARN]: size of motor_temperature_limit is " << motorTemperatureLimitFromConf.size() << ", not equal to " << m_robot->numJoints() << std::endl;
     for (int i = 0; i < m_robot->numJoints(); i++) {
       m_thermoLimiterParams[i].maxTemperature = 80.0;
+      m_thermoLimiterParams[i].tauMax = m_robot->joint(i)->climit;
       m_thermoLimiterParams[i].temperatureErrorFlag = false;
     }
   } else {
     for (int i = 0; i < m_robot->numJoints(); i++) {
       coil::stringTo(m_thermoLimiterParams[i].maxTemperature, motorTemperatureLimitFromConf[i].c_str());
+      m_thermoLimiterParams[i].tauMax = m_robot->joint(i)->climit;
       m_thermoLimiterParams[i].temperatureErrorFlag = false;
     }
   }
@@ -238,8 +244,6 @@ RTC::ReturnCode_t ThermoLimiter::onExecute(RTC::UniqueId ec_id)
   tm.sec = coiltm.sec();
   tm.nsec = coiltm.usec()*1000;
   bool isTempError = false;
-  hrp::dvector tauMax;
-  tauMax.resize(m_robot->numJoints());
 
   // update port
   if (m_tempInIn.isNew()) {
@@ -253,7 +257,7 @@ RTC::ReturnCode_t ThermoLimiter::onExecute(RTC::UniqueId ec_id)
   }
 
   // calculate tauMax
-  isTempError = limitTemperature(tauMax);
+  isTempError = limitTemperature();
   // call beep
   if (isTempError) {
     start_beep(3136);
@@ -262,7 +266,7 @@ RTC::ReturnCode_t ThermoLimiter::onExecute(RTC::UniqueId ec_id)
   }
   // output restricted tauMax
   for (int i = 0; i < m_robot->numJoints(); i++) {
-    m_tauMaxOut.data[i] = tauMax[i];
+    m_tauMaxOut.data[i] = m_thermoLimiterParams[i].tauMax;
   }
   m_tauMaxOut.tm = tm;
   m_tauMaxOutOut.write();
@@ -304,7 +308,28 @@ RTC::ReturnCode_t ThermoLimiter::onRateChanged(RTC::UniqueId ec_id)
 }
 */
 
-bool ThermoLimiter::limitTemperature(hrp::dvector &tauMax)
+bool ThermoLimiter::isMaxTemperatureError(int jointId)
+{
+  if (jointId < m_robot->numJoints()) {
+    return m_thermoLimiterParams[jointId].temperatureErrorFlag;
+  } else {
+    std::cerr << "Target jointId is over numJoints " << m_robot->numJoints() << std::endl;
+    return false;
+  }
+}
+
+double ThermoLimiter::getMaxToruqe(int jointId)
+{
+  if (jointId < m_robot->numJoints()) {
+    return m_thermoLimiterParams[jointId].tauMax;
+  } else {
+    std::cerr << "Target jointId is over numJoints " << m_robot->numJoints() << std::endl;
+    return 0.0;
+  }
+}
+
+
+bool ThermoLimiter::limitTemperature(void)
 {
   static long loop = 0;
   loop++;
@@ -343,22 +368,26 @@ bool ThermoLimiter::limitTemperature(hrp::dvector &tauMax)
       // determine tauMax
       if (squareTauMax[i] < 0) {
         std::cerr << "[WARN] tauMax ** 2 = " << squareTauMax[i] << " < 0 in Joint " << i << std::endl;
-        tauMax[i] = m_robot->joint(i)->climit;
+        m_thermoLimiterParams[i].tauMax = m_robot->joint(i)->climit;
+        m_thermoLimiterParams[i].temperatureErrorFlag = true;
+        isTempError = true;
       } else {
+        m_thermoLimiterParams[i].tauMax = std::sqrt(squareTauMax[i]);
         if (std::pow(m_tauIn.data[i], 2) > squareTauMax[i]) {
-          std::cerr << "[WARN] tauMax over in Joint " << i << ": " << m_tauIn.data[i] << "^2 > " << squareTauMax[i] << std::endl;
+          std::cerr << "[WARN] tauMax over in Joint " << i << ": ||" << m_tauIn.data[i] << "|| > " << m_thermoLimiterParams[i].tauMax << std::endl;
           m_thermoLimiterParams[i].temperatureErrorFlag = true;
-          isTempError = true; // in thermo emergency
+          isTempError = true;
+        } else {
+          m_thermoLimiterParams[i].temperatureErrorFlag = false;
         }
-        tauMax[i] = std::sqrt(squareTauMax[i]);
       }
     }
     
     if (DEBUGP) {
       std::cerr << std::endl;
       std::cerr << "tauMax: ";
-      for (int i = 0; i < tauMax.size(); i++) {
-        std::cerr << tauMax[i] << " ";
+      for (int i = 0; i < m_robot->numJoints(); i++) {
+        std::cerr << m_thermoLimiterParams[i].tauMax << " ";
       }
       std::cerr << std::endl;
     }
