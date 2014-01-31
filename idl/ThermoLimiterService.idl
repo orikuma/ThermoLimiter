@@ -1,0 +1,23 @@
+/**
+ * @file ThermoLimiterService.idl
+ * @brief Services for the robot hardware interface
+ */
+module OpenHRP
+{
+  interface ThermoLimiterService
+  {
+    /**
+     * @brief get max temperature error flag
+     * @param jointId target joint id
+     * @return if in temperature error, return true
+     */
+	boolean isMaxTemperatureError(in long jointId);
+
+    /**
+     * @brief get current max torque in target joint
+     * @param jointId target joint id
+     * @return current max torque
+     */
+	double getMaxToruqe(in long jointId);
+  };
+};
